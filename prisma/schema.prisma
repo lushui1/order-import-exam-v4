@@ -1,0 +1,60 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 解析规则
+model ParseRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  fileType    String   // excel | word | pdf
+  ruleJson    String   // JSON格式的规则定义
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  imports     Import[]
+}
+
+// 导入批次
+model Import {
+  id          String      @id @default(cuid())
+  fileName    String
+  ruleId      String?
+  rule        ParseRule?  @relation(fields: [ruleId], references: [id])
+  status      String      @default("pending") // pending | parsing | parsed | submitting | submitted | failed
+  totalRows   Int         @default(0)
+  errorRows   Int         @default(0)
+  errorMsg    String?
+  createdAt   DateTime    @default(now())
+  orders      Order[]
+}
+
+// 运单/出库单
+model Order {
+  id                String  @id @default(cuid())
+  importId          String
+  import            Import  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  
+  externalCode      String?
+  receiverStore     String?
+  receiverName      String?
+  receiverPhone     String?
+  receiverAddress   String?
+  skuCode           String
+  skuName           String
+  skuQuantity       String
+  skuSpec           String?
+  remark            String?
+  
+  rowIndex          Int
+  hasError          Boolean @default(false)
+  errorMsg          String?
+  
+  createdAt         DateTime @default(now())
+
+  @@map("orders")
+}
