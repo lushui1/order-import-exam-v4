@@ -3,34 +3,50 @@
 const LLM_API_URL = process.env.LLM_API_URL || 'https://api.deepseek.com/v1/chat/completions';
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
 const LLM_MODEL = process.env.LLM_MODEL || 'deepseek-chat';
+// LLM 调用超时（毫秒），避免上游挂起导致请求永久等待
+const LLM_TIMEOUT_MS = 30_000;
 
 export async function callLLM(prompt: string): Promise<string> {
   if (!LLM_API_KEY) {
     throw new Error('LLM_API_KEY 未配置');
   }
-  
-  const response = await fetch(LLM_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${LLM_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: LLM_MODEL,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.1,
-      max_tokens: 4000,
-    }),
-  });
-  
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(LLM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LLM_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 4000,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`LLM 调用超时（${LLM_TIMEOUT_MS}ms）`);
+    }
+    throw new Error(`LLM 调用失败: ${err?.message || '未知错误'}`);
+  } finally {
+    clearTimeout(timer);
+  }
+
   if (!response.ok) {
     const err = await response.text();
     throw new Error(`LLM API错误: ${response.status} ${err}`);
   }
-  
+
   const data = await response.json();
   return data.choices[0]?.message?.content || '';
 }

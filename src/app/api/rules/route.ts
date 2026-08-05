@@ -9,7 +9,8 @@ export async function GET() {
     });
     return NextResponse.json(rules);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('查询规则异常:', error);
+    return NextResponse.json({ error: '服务器内部错误，请稍后重试' }, { status: 500 });
   }
 }
 
@@ -38,7 +39,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(rule);
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('保存规则异常:', error);
+    return NextResponse.json({ error: '服务器内部错误，请稍后重试' }, { status: 500 });
   }
 }
 
@@ -55,6 +57,7 @@ export async function DELETE(req: NextRequest) {
     await prisma.parseRule.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('删除规则异常:', error);
+    return NextResponse.json({ error: '服务器内部错误，请稍后重试' }, { status: 500 });
   }
 }

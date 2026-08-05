@@ -7,7 +7,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 解析规则
+// ── V2 复用表（PRD 7.1）───────────────────────────────────────────
+
+// 解析规则（PRD 7.1: parse_rules 继续复用）
 model ParseRule {
   id          String   @id @default(cuid())
   name        String
@@ -19,7 +21,7 @@ model ParseRule {
   imports     Import[]
 }
 
-// 导入批次
+// V2 导入批次记录（保留兼容，新异步链路使用 ImportTask）
 model Import {
   id          String      @id @default(cuid())
   fileName    String
@@ -33,12 +35,13 @@ model Import {
   orders      Order[]
 }
 
-// 运单/出库单
+// 运单/出库单主表（PRD 7.1: waybills；本项目为 orders，保留语义，仅增加索引）
 model Order {
   id                String  @id @default(cuid())
   importId          String
   import            Import  @relation(fields: [importId], references: [id], onDelete: Cascade)
-  
+  taskId            String? // 新异步链路归属的导入任务（PRD 稳定业务键前缀）
+
   externalCode      String?
   receiverStore     String?
   receiverName      String?
@@ -49,12 +52,169 @@ model Order {
   skuQuantity       String
   skuSpec           String?
   remark            String?
-  
+
   rowIndex          Int
   hasError          Boolean @default(false)
   errorMsg          String?
-  
+
   createdAt         DateTime @default(now())
 
+  // PRD 7.3: 业务去重键索引（external_order_no + sku_code + line_no 等价键）
+  @@index([importId])
+  @@index([importId, hasError])
+  @@index([createdAt])
+  @@index([taskId, externalCode, skuCode, rowIndex])
+  // PRD 模块五: 处理单元幂等键（同一任务内 row_index 唯一，UPSERT 基于此键）
+  @@unique([taskId, rowIndex])
   @@map("orders")
+}
+
+// ── 新增表（PRD 7.2）──────────────────────────────────────────────
+
+// SKU 主数据：压测与校验数据源
+model SkuMaster {
+  id        String   @id @default(cuid())
+  skuCode   String   @unique @map("sku_code")
+  name      String
+  spec      String?
+  unit      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sku_master")
+}
+
+// 导入任务主表
+model ImportTask {
+  id               String   @id @default(cuid())
+  fileName         String   @map("file_name")
+  fileKey          String   @map("file_key") // 原始文件引用（对象存储/本地路径）
+  ruleId           String?  @map("rule_id")
+  importId         String?  @map("import_id") // 兼容 V2 Import 表外键（orders.importId 非空约束）
+  status           String   @default("pending") // pending | processing | completed | partial_success | failed
+  totalRows        Int      @default(0) @map("total_rows")
+  processedRows    Int      @default(0) @map("processed_rows")
+  successRows      Int      @default(0) @map("success_rows")
+  failedRows       Int      @default(0) @map("failed_rows")
+  totalBatches     Int      @default(0) @map("total_batches")
+  completedBatches Int      @default(0) @map("completed_batches")
+  traceId          String   @map("trace_id")
+  degraded         Boolean  @default(false)
+  degradedReason   String?  @map("degraded_reason")
+  errorMessage     String?  @map("error_message")
+  createdAt        DateTime @default(now()) @map("created_at")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+
+  batches      ImportTaskBatch[]
+  errors       ImportTaskError[]
+  perfLogs     BatchPerformanceLog[]
+  traceEvents  TraceEvent[]
+
+  // PRD 7.3: import_tasks.status + created_at 组合索引
+  @@index([status, createdAt])
+  @@map("import_tasks")
+}
+
+// 处理单元（批次）状态表
+model ImportTaskBatch {
+  id          String    @id @default(cuid())
+  taskId      String    @map("task_id")
+  unitId      String    @map("unit_id")
+  batchIndex  Int       @map("batch_index")
+  startRow    Int       @map("start_row")
+  endRow      Int       @map("end_row")
+  status      String    @default("pending") // pending | processing | completed | failed
+  retryCount  Int       @default(0) @map("retry_count")
+  lockedAt    DateTime? @map("locked_at")
+  completedAt DateTime? @map("completed_at")
+  lastError   String?   @map("last_error")
+
+  task    ImportTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // PRD 7.3: task_id + unit_id 唯一索引（幂等基础）
+  @@unique([taskId, unitId])
+  @@map("import_task_batches")
+}
+
+// 行级错误明细
+model ImportTaskError {
+  id          String   @id @default(cuid())
+  taskId      String   @map("task_id")
+  unitId      String?  @map("unit_id")
+  batchIndex  Int      @map("batch_index")
+  rowNumber   Int      @map("row_number")
+  fieldName   String   @map("field_name")
+  rawValue    String?  @map("raw_value")
+  errorCode   String   @map("error_code") // E001-E008
+  errorReason String   @map("error_reason")
+  traceId     String?  @map("trace_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task ImportTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // PRD 7.3: task_id + unit_id、error_code 索引
+  @@index([taskId, unitId])
+  @@index([errorCode])
+  @@map("import_task_errors")
+}
+
+// Transactional Outbox：本地可靠事件表
+model EventOutbox {
+  id            String    @id @default(cuid())
+  eventId       String    @map("event_id")
+  eventType     String    @map("event_type") // ImportBatchCreated 等
+  schemaVersion Int       @default(1) @map("schema_version")
+  aggregateId   String    @map("aggregate_id")
+  traceId       String?   @map("trace_id")
+  payload       Json
+  status        String    @default("pending") // pending | sent | failed
+  retryCount    Int       @default(0) @map("retry_count")
+  nextRetryAt   DateTime? @map("next_retry_at")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  sentAt        DateTime? @map("sent_at")
+
+  // PRD 7.3: status + next_retry_at 索引
+  @@index([status, nextRetryAt])
+  @@map("event_outbox")
+}
+
+// 处理单元性能日志
+model BatchPerformanceLog {
+  id                String   @id @default(cuid())
+  taskId            String   @map("task_id")
+  unitId            String?  @map("unit_id")
+  batchIndex        Int      @map("batch_index")
+  parseDurationMs   Int      @default(0) @map("parse_duration_ms")
+  ruleDurationMs    Int      @default(0) @map("rule_duration_ms")
+  validateDurationMs Int     @default(0) @map("validate_duration_ms")
+  insertDurationMs  Int      @default(0) @map("insert_duration_ms")
+  totalDurationMs   Int      @default(0) @map("total_duration_ms")
+  status            String
+  traceId           String?  @map("trace_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  task ImportTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // PRD 7.3: task_id + unit_id 索引
+  @@index([taskId, unitId])
+  @@map("batch_performance_log")
+}
+
+// 链路追踪事件表
+model TraceEvent {
+  id          String   @id @default(cuid())
+  traceId     String   @map("trace_id")
+  taskId      String?  @map("task_id")
+  unitId      String?  @map("unit_id")
+  eventName   String   @map("event_name")
+  eventStatus String   @map("event_status") // ok | error | warn
+  message     String?
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+
+  task ImportTask? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // PRD 7.3: trace_id + occurred_at 索引
+  @@index([traceId, occurredAt])
+  @@map("trace_events")
 }

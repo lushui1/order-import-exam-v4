@@ -5,11 +5,19 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "next start"
+    "start": "next start",
+    "seed:sku": "tsx scripts/seed-data.ts",
+    "worker": "tsx scripts/worker.ts",
+    "dispatcher": "tsx scripts/dispatcher.ts",
+    "load-test": "tsx scripts/load-test.ts",
+    "load-test:direct": "tsx scripts/load-test-direct.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",
     "@tanstack/react-table": "^8.21.3",
+    "bullmq": "^6.0.8",
+    "ioredis": "^6.0.0",
     "lucide-react": "^1.17.0",
     "mammoth": "^1.12.0",
     "next": "16.2.6",
@@ -26,6 +34,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.7",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

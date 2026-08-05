@@ -25,6 +25,9 @@
 .idea/
 *.pem
 
+# local uploads (文件存储目录，不入库)
+uploads/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

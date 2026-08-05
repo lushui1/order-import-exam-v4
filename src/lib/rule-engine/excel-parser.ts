@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import { ParseRule, ColumnMapping, ParsedRow, FIELD_KEYS } from './types';
+import { safeRegExp } from './safe-regex';
+import { validateOrderRow } from './validation';
 
 // Excel解析器
 export function parseExcel(buffer: Buffer, rule: ParseRule): ParsedRow[] {
@@ -91,7 +93,7 @@ function parseStandard(data: any[][], rule: ParseRule): ParsedRow[] {
     if (isHeaderRow(row, headers)) continue;
     
     const mapped = applyMappings(row, headers, rule.mappings);
-    const errors = validateRow(mapped);
+    const errors = validateOrderRow(mapped);
     
     results.push({
       rowIndex: i + 1,
@@ -133,7 +135,8 @@ function isHeaderRow(row: any[], headers: string[]): boolean {
 function parseCardBased(data: any[][], rule: ParseRule): ParsedRow[] {
   if (!rule.cardConfig) return [];
   
-  const boundaryRe = new RegExp(rule.cardConfig.boundaryPattern);
+  const boundaryRe = safeRegExp(rule.cardConfig.boundaryPattern);
+  if (!boundaryRe) return [];
   const headerOffset = rule.cardConfig.headerRowOffset || 1;
   const dataOffset = rule.cardConfig.dataRowOffset || 2;
   
@@ -166,7 +169,9 @@ function parseCardBased(data: any[][], rule: ParseRule): ParsedRow[] {
           const row = data[j] || [];
           const rowStr = row.map((c: any) => String(c || '')).join(' ');
           for (const p of rule.cardConfig.tailPatterns) {
-            const m = rowStr.match(new RegExp(p.regex));
+            const re = safeRegExp(p.regex);
+            if (!re) continue;
+            const m = rowStr.match(re);
             if (m) cardReceiver[p.target] = m[1] || '';
           }
         }
@@ -187,7 +192,7 @@ function parseCardBased(data: any[][], rule: ParseRule): ParsedRow[] {
       // 合并卡片级收货信息
       Object.assign(mapped, cardReceiver);
       
-      const errors = validateRow(mapped);
+      const errors = validateOrderRow(mapped);
       results.push({ rowIndex: i + 1, data: mapped, errors });
     }
   }
@@ -291,7 +296,9 @@ function applyTailSections(data: any[][], rows: ParsedRow[], rule: ParseRule) {
       const rowStr = row.map((c: any) => String(c || '')).join(' ');
       
       for (const p of section.patterns) {
-        const m = rowStr.match(new RegExp(p.regex));
+        const re = safeRegExp(p.regex);
+        if (!re) continue;
+        const m = rowStr.match(re);
         if (m) tailData[p.target] = (m[1] || '').trim();
       }
     }
@@ -352,39 +359,4 @@ function colToIndex(col: string): number {
   }
   const n = parseInt(col, 10);
   return isNaN(n) ? -1 : n - 1;
-}
-
-// 校验行
-function validateRow(data: Record<string, string>): string[] {
-  const errors: string[] = [];
-  
-  // A组/B组二选一
-  const hasA = !!(data.receiverStore);
-  const hasB = !!(data.receiverName && data.receiverPhone && data.receiverAddress);
-  if (!hasA && !hasB) {
-    errors.push('收货信息缺失：需填写收货门店(A组)或收件人姓名+电话+地址(B组)');
-  }
-  
-  // 必填校验
-  if (!data.skuCode) errors.push('SKU物品编码不能为空');
-  if (!data.skuName) errors.push('SKU物品名称不能为空');
-  if (!data.skuQuantity) errors.push('SKU发货数量不能为空');
-  
-  // 数量校验
-  if (data.skuQuantity) {
-    const qty = parseFloat(data.skuQuantity);
-    if (isNaN(qty) || qty <= 0) {
-      errors.push('SKU发货数量必须为正数');
-    }
-  }
-  
-  // 电话格式
-  if (data.receiverPhone) {
-    const phone = data.receiverPhone.replace(/\s/g, '');
-    if (!/^1[3-9]\d{9}$/.test(phone) && !/^0\d{2,3}-?\d{7,8}$/.test(phone)) {
-      errors.push('收件人电话格式不正确');
-    }
-  }
-  
-  return errors;
 }

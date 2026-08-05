@@ -4,8 +4,13 @@ import { prisma } from '@/lib/db';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    // 分页参数校验：非法值回退默认，并限制范围
+    const rawPage = parseInt(searchParams.get('page') || '1', 10);
+    const rawPageSize = parseInt(searchParams.get('pageSize') || '20', 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+    const pageSize = Number.isFinite(rawPageSize) && rawPageSize > 0
+      ? Math.min(rawPageSize, 100)
+      : 20;
     const importId = searchParams.get('importId');
     const externalCode = searchParams.get('externalCode');
     const receiverName = searchParams.get('receiverName');

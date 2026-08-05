@@ -1,4 +1,5 @@
 import { ParseRule, ParsedRow, ColumnMapping } from './types';
+import { validateOrderRow } from './validation';
 
 // Word解析器 - 服务端使用
 export async function parseWord(buffer: Buffer, rule: ParseRule): Promise<ParsedRow[]> {
@@ -81,7 +82,7 @@ function parseWordText(text: string, rule: ParseRule): ParsedRow[] {
     }
     
     if (mapped.skuCode || mapped.skuName) {
-      const errors = validateRow(mapped);
+      const errors = validateOrderRow(mapped);
       results.push({
         rowIndex: i + 1,
         data: mapped,
@@ -91,27 +92,4 @@ function parseWordText(text: string, rule: ParseRule): ParsedRow[] {
   }
   
   return results;
-}
-
-function validateRow(data: Record<string, string>): string[] {
-  const errors: string[] = [];
-  
-  const hasA = !!(data.receiverStore);
-  const hasB = !!(data.receiverName && data.receiverPhone && data.receiverAddress);
-  if (!hasA && !hasB) {
-    errors.push('收货信息缺失');
-  }
-  
-  if (!data.skuCode) errors.push('SKU物品编码不能为空');
-  if (!data.skuName) errors.push('SKU物品名称不能为空');
-  if (!data.skuQuantity) errors.push('SKU发货数量不能为空');
-  
-  if (data.skuQuantity) {
-    const qty = parseFloat(data.skuQuantity);
-    if (isNaN(qty) || qty <= 0) {
-      errors.push('SKU发货数量必须为正数');
-    }
-  }
-  
-  return errors;
 }

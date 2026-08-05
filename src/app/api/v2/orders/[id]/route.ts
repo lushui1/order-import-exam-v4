@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-const API_KEY = process.env.V2_API_KEY || 'dev-key';
+const API_KEY = process.env.V2_API_KEY;
 
+// 未配置时不提供默认密钥：运行时校验，缺失时拒绝所有请求
 function checkAuth(req: NextRequest): boolean {
+  if (!API_KEY) return false;
   return req.headers.get('x-api-key') === API_KEY;
 }
 
@@ -49,6 +51,7 @@ export async function GET(
       remark: o.remark,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('V2 运单详情异常:', error);
+    return NextResponse.json({ error: '服务器内部错误，请稍后重试' }, { status: 500 });
   }
 }

@@ -25,7 +25,6 @@ export async function POST(req: NextRequest) {
     
     // 读取文件
     const uploadDir = path.join(process.cwd(), 'uploads');
-    const files = await readFile(uploadDir).catch(() => []);
     const filePath = path.join(uploadDir, `${importId}_${importRecord.fileName}`);
     
     let buffer: Buffer;
@@ -35,27 +34,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '文件不存在，请重新上传' }, { status: 404 });
     }
     
-    // 检查是否已有解析结果
-    const existingOrders = await prisma.order.count({
-      where: { importId },
-    });
-    
-    if (existingOrders > 0) {
-      // 删除旧记录重新解析
-      await prisma.order.deleteMany({ where: { importId } });
-    }
-    
-    // 更新状态
-    await prisma.import.update({
-      where: { id: importId },
+    // 更新状态为解析中（仅当尚未解析完成，避免并发重复解析互相覆盖）
+    const claimed = await prisma.import.updateMany({
+      where: { id: importId, status: { in: ['pending', 'parsing', 'parsed'] } },
       data: { status: 'parsing' },
     });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: '导入状态不允许解析' }, { status: 409 });
+    }
     
     // 执行解析
     const parseRule = rule as ParseRule;
     const rows = await executeParse(buffer, importRecord.fileName, parseRule);
     
-    // 保存规则
+    // 保存规则（不参与导入事务，失败不影响数据落库）
     let ruleId = body.ruleId;
     if (!ruleId && rule.name) {
       const savedRule = await prisma.parseRule.create({
@@ -69,39 +61,39 @@ export async function POST(req: NextRequest) {
       ruleId = savedRule.id;
     }
     
-    // 保存解析结果
     const errorRows = rows.filter(r => r.errors.length > 0).length;
     
-    // 批量创建订单
-    await prisma.order.createMany({
-      data: rows.map(row => ({
-        importId,
-        externalCode: row.data.externalCode || null,
-        receiverStore: row.data.receiverStore || null,
-        receiverName: row.data.receiverName || null,
-        receiverPhone: row.data.receiverPhone || null,
-        receiverAddress: row.data.receiverAddress || null,
-        skuCode: row.data.skuCode || '',
-        skuName: row.data.skuName || '',
-        skuQuantity: row.data.skuQuantity || '0',
-        skuSpec: row.data.skuSpec || null,
-        remark: row.data.remark || null,
-        rowIndex: row.rowIndex,
-        hasError: row.errors.length > 0,
-        errorMsg: row.errors.length > 0 ? row.errors.join('; ') : null,
-      })),
-    });
-    
-    // 更新导入记录
-    await prisma.import.update({
-      where: { id: importId },
-      data: {
-        status: 'parsed',
-        totalRows: rows.length,
-        errorRows,
-        ruleId: ruleId || null,
-      },
-    });
+    // 删除旧结果 + 批量写入 + 更新状态，放在同一事务内保证原子性
+    await prisma.$transaction([
+      prisma.order.deleteMany({ where: { importId } }),
+      prisma.order.createMany({
+        data: rows.map(row => ({
+          importId,
+          externalCode: row.data.externalCode || null,
+          receiverStore: row.data.receiverStore || null,
+          receiverName: row.data.receiverName || null,
+          receiverPhone: row.data.receiverPhone || null,
+          receiverAddress: row.data.receiverAddress || null,
+          skuCode: row.data.skuCode || '',
+          skuName: row.data.skuName || '',
+          skuQuantity: row.data.skuQuantity || '0',
+          skuSpec: row.data.skuSpec || null,
+          remark: row.data.remark || null,
+          rowIndex: row.rowIndex,
+          hasError: row.errors.length > 0,
+          errorMsg: row.errors.length > 0 ? row.errors.join('; ') : null,
+        })),
+      }),
+      prisma.import.update({
+        where: { id: importId },
+        data: {
+          status: 'parsed',
+          totalRows: rows.length,
+          errorRows,
+          ruleId: ruleId || null,
+        },
+      }),
+    ]);
     
     return NextResponse.json({
       totalRows: rows.length,
@@ -113,6 +105,7 @@ export async function POST(req: NextRequest) {
       })),
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('解析接口异常:', error);
+    return NextResponse.json({ error: '解析失败，请稍后重试' }, { status: 500 });
   }
 }

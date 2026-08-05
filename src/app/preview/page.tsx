@@ -90,13 +90,33 @@ export default function PreviewPage() {
     }
   };
 
-  const handleExport = () => {
-    // 导出为Excel
-    const XLSX = require('xlsx');
-    const ws = XLSX.utils.json_to_sheet(rows.map(r => r.data));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '运单数据');
-    XLSX.writeFile(wb, `运单导出_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  const handleExport = async () => {
+    try {
+      setLoading('导出中...');
+      // 导出走服务端，避免在客户端打包 xlsx
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || '导出失败');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `运单导出_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setLoading('');
+    }
   };
 
   const errCount = rows.filter(r => r.errors.length > 0).length;

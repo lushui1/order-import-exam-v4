@@ -1,4 +1,6 @@
 import { ParseRule, ParsedRow, ColumnMapping } from './types';
+import { safeRegExp } from './safe-regex';
+import { validateOrderRow } from './validation';
 
 // PDF解析器 - 服务端使用
 export async function parsePDF(buffer: Buffer, rule: ParseRule): Promise<ParsedRow[]> {
@@ -68,7 +70,7 @@ function parseTablePDF(text: string, rule: ParseRule): ParsedRow[] {
       }
     }
     
-    const errors = validateRow(mapped);
+    const errors = validateOrderRow(mapped);
     results.push({ rowIndex: i + 1, data: mapped, errors });
   }
   
@@ -108,7 +110,7 @@ function parseTextPDF(text: string, rule: ParseRule): ParsedRow[] {
     }
     
     if (mapped.skuCode || mapped.skuName) {
-      const errors = validateRow(mapped);
+      const errors = validateOrderRow(mapped);
       results.push({ rowIndex: i + 1, data: mapped, errors });
     }
   }
@@ -122,7 +124,9 @@ function extractTailInfo(lines: string[], rule: ParseRule): Record<string, strin
   if (rule.pdfTailPatterns) {
     for (const line of lines) {
       for (const p of rule.pdfTailPatterns) {
-        const m = line.match(new RegExp(p.regex));
+        const re = safeRegExp(p.regex);
+        if (!re) continue;
+        const m = line.match(re);
         if (m) info[p.target] = (m[1] || '').trim();
       }
     }
@@ -138,19 +142,4 @@ function extractTailInfo(lines: string[], rule: ParseRule): Record<string, strin
   }
   
   return info;
-}
-
-function validateRow(data: Record<string, string>): string[] {
-  const errors: string[] = [];
-  const hasA = !!(data.receiverStore);
-  const hasB = !!(data.receiverName && data.receiverPhone && data.receiverAddress);
-  if (!hasA && !hasB) errors.push('收货信息缺失');
-  if (!data.skuCode) errors.push('SKU物品编码不能为空');
-  if (!data.skuName) errors.push('SKU物品名称不能为空');
-  if (!data.skuQuantity) errors.push('SKU发货数量不能为空');
-  if (data.skuQuantity) {
-    const qty = parseFloat(data.skuQuantity);
-    if (isNaN(qty) || qty <= 0) errors.push('SKU发货数量必须为正数');
-  }
-  return errors;
 }

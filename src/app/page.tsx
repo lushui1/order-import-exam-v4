@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 export default function HomePage() {
   const [file, setFile] = useState<File | null>(null);
   const [rules, setRules] = useState<any[]>([]);
+  const [rulesError, setRulesError] = useState('');
   const [selectedRule, setSelectedRule] = useState<any>(null);
   const [aiRule, setAiRule] = useState<any>(null);
   const [loading, setLoading] = useState('');
@@ -15,7 +16,13 @@ export default function HomePage() {
 
   // 加载规则列表
   useEffect(() => {
-    fetch('/api/rules').then(r => r.json()).then(setRules).catch(() => {});
+    fetch('/api/rules')
+      .then(r => {
+        if (!r.ok) throw new Error(`加载失败(${r.status})`);
+        return r.json();
+      })
+      .then(setRules)
+      .catch((err) => setRulesError(err.message || '规则加载失败'));
   }, []);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -26,50 +33,46 @@ export default function HomePage() {
     }
   };
 
+  // PRD 模块二：上传即返回 task_id，不同步等待解析完成
   const handleUpload = async () => {
     if (!file || loading) return;
-    setLoading('上传中...');
+    setLoading('创建任务中...');
 
     try {
+      let ruleId: string | null = null;
+      // AI 生成的规则（未保存）先保存，获得 ruleId
+      if (aiRule && !selectedRule) {
+        const saveRes = await fetch('/api/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: aiRule.name || 'AI生成规则',
+            fileType: aiRule.fileType || 'excel',
+            ruleJson: JSON.stringify(aiRule),
+          }),
+        });
+        const saved = await saveRes.json();
+        if (!saveRes.ok) throw new Error(saved.error || '规则保存失败');
+        ruleId = saved.id;
+      } else if (selectedRule) {
+        ruleId = selectedRule.id;
+      }
+
       const fd = new FormData();
       fd.append('file', file);
-      if (selectedRule) fd.append('ruleId', selectedRule.id);
+      if (ruleId) fd.append('ruleId', ruleId);
 
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const res = await fetch('/api/import-tasks', { method: 'POST', body: fd });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || '任务创建失败');
 
-      if (data.error) throw new Error(data.error);
-
-      // 如果有选中的规则，直接解析
-      if (selectedRule) {
-        await parseWithRule(data.importId, JSON.parse(selectedRule.ruleJson));
-      } else {
-        // 跳转到规则配置页
-        sessionStorage.setItem('uploadData', JSON.stringify(data));
-        router.push('/rules');
-      }
+      // 进入任务进度页
+      router.push(`/tasks/${data.task_id}`);
     } catch (err: any) {
-      alert(err.message);
+      alert(err.message || '上传失败');
     } finally {
       setLoading('');
     }
-  };
-
-  const parseWithRule = async (importId: string, rule: any) => {
-    setLoading('解析中...');
-
-    const res = await fetch('/api/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ importId, rule }),
-    });
-    const data = await res.json();
-
-    if (data.error) throw new Error(data.error);
-
-    sessionStorage.setItem('parseResult', JSON.stringify(data));
-    sessionStorage.setItem('importId', importId);
-    router.push('/preview');
   };
 
   const handleAIGenerate = async () => {
@@ -100,10 +103,10 @@ export default function HomePage() {
         {/* 标题 */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>
-            万能导入 V2
+            万能导入 V4
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: 15 }}>
-            智能多格式批量下单系统 — AI规则引擎
+            异步事件驱动批量导入系统 — 上传即返回，后台异步处理
           </p>
         </div>
 
@@ -136,7 +139,7 @@ export default function HomePage() {
             {file ? (
               <div>
                 <p style={{ fontSize: 16, fontWeight: 500 }}>{file.name}</p>
-                <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>
                   {(file.size / 1024).toFixed(1)} KB
                 </p>
               </div>
@@ -145,7 +148,7 @@ export default function HomePage() {
                 <p style={{ fontSize: 48, marginBottom: 8 }}>📄</p>
                 <p style={{ fontSize: 15 }}>拖拽文件到此处，或点击选择</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-                  支持 Excel (.xlsx/.xls)、Word (.docx)、PDF
+                  支持 Excel (.xlsx/.xls)、Word (.docx)、PDF · 最大 10MB
                 </p>
               </div>
             )}
@@ -161,7 +164,7 @@ export default function HomePage() {
               {rules.map(rule => (
                 <div
                   key={rule.id}
-                  onClick={() => setSelectedRule(rule)}
+                  onClick={() => { setSelectedRule(rule); setAiRule(null); }}
                   style={{
                     padding: '12px 16px',
                     border: `2px solid ${selectedRule?.id === rule.id ? 'var(--primary)' : 'var(--border)'}`,
@@ -178,6 +181,10 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
+          ) : rulesError ? (
+            <p style={{ color: 'var(--error)', marginBottom: 16 }}>
+              ⚠️ 规则加载失败：{rulesError}
+            </p>
           ) : (
             <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>暂无已保存的规则</p>
           )}
@@ -192,7 +199,6 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* AI生成的规则预览 */}
           {aiRule && (
             <div style={{
               marginTop: 16,
@@ -203,16 +209,13 @@ export default function HomePage() {
             }}>
               <p style={{ fontWeight: 500, marginBottom: 8 }}>🤖 AI生成的规则：</p>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                名称: {aiRule.name}
-              </p>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                映射字段: {aiRule.mappings?.length || 0} 个
+                名称: {aiRule.name} · 映射字段: {aiRule.mappings?.length || 0} 个
               </p>
               <div style={{ marginTop: 8 }}>
                 <button
                   className="btn-primary"
                   onClick={() => {
-                    setSelectedRule({ ruleJson: JSON.stringify(aiRule), name: aiRule.name });
+                    setSelectedRule(null);
                     alert('已选择AI规则，点击"开始导入"执行');
                   }}
                 >
@@ -223,7 +226,7 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* 操作按钮 */}
+        {/* 操作按钮：防重复点击 */}
         <div style={{ textAlign: 'center' }}>
           <button
             className="btn-primary"
@@ -240,7 +243,9 @@ export default function HomePage() {
         {/* 导航 */}
         <div style={{ textAlign: 'center', marginTop: 32 }}>
           <a href="/imports" style={{ color: 'var(--primary)', marginRight: 24 }}>📋 已导入运单</a>
-          <a href="/rules" style={{ color: 'var(--primary)' }}>⚙️ 规则管理</a>
+          <a href="/rules" style={{ color: 'var(--primary)', marginRight: 24 }}>⚙️ 规则管理</a>
+          <a href="/monitor" style={{ color: 'var(--primary)', marginRight: 24 }}>📊 监控看板</a>
+          <a href="/traces" style={{ color: 'var(--primary)' }}>🔍 Trace 检索</a>
         </div>
       </div>
     </div>

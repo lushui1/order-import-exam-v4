@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 // ── 简单 API Key 鉴权 ──
-const API_KEY = process.env.V2_API_KEY || 'dev-key';
+// 未配置时不提供默认密钥：运行时校验，缺失时拒绝所有请求（避免生产环境降级为公开密钥）
+const API_KEY = process.env.V2_API_KEY;
 
 function checkAuth(req: NextRequest): boolean {
+  if (!API_KEY) return false;
   const key = req.headers.get('x-api-key');
   return key === API_KEY;
 }
@@ -83,8 +85,9 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
     });
   } catch (error: any) {
+    console.error('V2 运单查询异常:', error);
     return NextResponse.json({
-      error: error.message || '未知错误',
+      error: 'V2 数据库查询失败',
       hint: 'V2 数据库查询失败',
       shouldDegrade: true,
     }, { status: 503 });
