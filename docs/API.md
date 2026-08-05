@@ -21,7 +21,7 @@
   "trace_id": "trace_xxx",
   "status": "PENDING",
   "total_rows": 10000,
-  "total_batches": 10,
+  "total_batches": 6,
   "file_key": "import_tasks/task_xxx.xlsx"
 }
 ```
@@ -62,7 +62,7 @@
       "status": "COMPLETED",
       "retry_count": 0,
       "start_row": 1,
-      "end_row": 1000,
+      "end_row": 2000,
       "completed_at": "2026-08-05T10:00:03.000Z"
     }
   ],
