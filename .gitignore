@@ -28,6 +28,9 @@
 # local uploads (文件存储目录，不入库)
 uploads/
 
+# 部署临时凭据文件（不入库，用完即删）
+.deploy-creds/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

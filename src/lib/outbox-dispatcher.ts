@@ -7,8 +7,10 @@
  * - 服务宕机恢复后继续投递（pending/failed 且 next_retry_at <= now 都会被重新领取）
  */
 import { prisma } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { enqueueBatchJob } from '@/lib/queue';
 import { recordTrace } from '@/lib/trace';
+import { DB_SCHEMA } from '@/lib/config';
 
 // 最大投递重试次数
 const MAX_DISPATCH_RETRY = 5;
@@ -24,21 +26,27 @@ export interface DispatchResult {
 }
 
 /**
- * 领取一条 Outbox 记录（行锁 + 跳过已锁），返回 null 表示无可投递
+ * 领取一条 Outbox 记录（单条原子 SQL，兼容 Neon pgbouncer，不支持交互式事务）
+ * - 行锁 + SKIP LOCKED 防止多 Dispatcher 并发领取同一条
+ * - 领取后置为 dispatching 并设置 60 秒可重领窗口（next_retry_at）
+ * - 若 Dispatcher 崩溃，60 秒后该记录可被重新领取（宕机恢复，PRD 模块三）
  */
 async function claimOne(): Promise<{ id: string } | null> {
-  return prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM event_outbox
-      WHERE status IN ('pending', 'failed')
-        AND (next_retry_at IS NULL OR next_retry_at <= NOW())
-      ORDER BY created_at ASC
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    UPDATE "${Prisma.raw(DB_SCHEMA)}"."event_outbox"
+    SET "status" = 'dispatching', "next_retry_at" = NOW() + INTERVAL '60 seconds'
+    WHERE "id" = (
+      SELECT "id" FROM "${Prisma.raw(DB_SCHEMA)}"."event_outbox"
+      WHERE ("status" IN ('pending', 'failed') AND ("next_retry_at" IS NULL OR "next_retry_at" <= NOW()))
+         OR ("status" = 'dispatching' AND "next_retry_at" <= NOW())
+      ORDER BY "created_at" ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
-    `;
-    if (rows.length === 0) return null;
-    return { id: rows[0].id };
-  });
+    )
+    RETURNING "id"
+  `;
+  if (rows.length === 0) return null;
+  return { id: rows[0].id };
 }
 
 /**

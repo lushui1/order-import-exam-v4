@@ -15,6 +15,21 @@
 | 压测文件 | `test-data/10000-orders.xlsx`（10,000 行，4.7 MB） |
 | 解析规则 | `load-test-rule`（seed 脚本生成） |
 
+## 1.1 在线部署状态（Vercel）
+
+| 项 | 值 |
+|---|---|
+| 在线系统 | https://monkeycodevercel.vercel.app |
+| 部署 URL | https://monkeycodevercel-6lh3rks22-lushui2s-projects.vercel.app |
+| 源码仓库 | https://github.com/lushui1/order-import-exam-v4 |
+| 部署状态 | ✅ Ready（Vercel CLI 确认） |
+
+> 在线压测说明：本机所在网络对 vercel.app 域名的 DNS 解析被污染（解析到错误 IP），TCP 443 连接全部超时/ENETUNREACH，且无可用代理，因此无法从本机执行在线 HTTP 压测。需在可访问 Vercel 的网络环境中执行：
+> ```bash
+> LOAD_TEST_BASE_URL="https://monkeycodevercel.vercel.app" npm run load-test
+> ```
+> 同时按 PRD 3.1，Worker 应部署在 Railway/Render/Fly.io 等常驻平台（Vercel Serverless 不适合长任务），完整在线链路压测需配置 Redis 与常驻 Worker。
+
 ## 2. 容量配置（实测）
 
 | 项 | 配置值 |

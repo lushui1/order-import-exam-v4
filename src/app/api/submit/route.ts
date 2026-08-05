@@ -82,18 +82,19 @@ async function submitWithRows(importId: string, rows: SubmitRow[]) {
   }
 
   try {
-    // 事务：删除旧数据 + 写入新数据 + 状态流转（条件更新防重入）
-    const result = await prisma.$transaction(async (tx) => {
-      const claimed = await tx.import.updateMany({
-        where: { id: importId, status: { in: ['parsed', 'pending', 'parsing'] } },
-        data: { status: 'submitted' },
-      });
-      if (claimed.count === 0) {
-        return { conflict: true };
-      }
+    // 防重入门闩：条件更新（Neon pgbouncer 不支持 $transaction(async) 交互式事务，P2028）
+    const claimed = await prisma.import.updateMany({
+      where: { id: importId, status: { in: ['parsed', 'pending', 'parsing'] } },
+      data: { status: 'submitted' },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: '导入状态不允许提交（可能已提交）' }, { status: 409 });
+    }
 
-      await tx.order.deleteMany({ where: { importId } });
-      await tx.order.createMany({
+    // 门闩成功后：删除旧数据 + 写入新数据 + 更新统计（数组事务，兼容 Neon）
+    await prisma.$transaction([
+      prisma.order.deleteMany({ where: { importId } }),
+      prisma.order.createMany({
         data: validated.map(row => ({
           importId,
           externalCode: row.data.externalCode || null,
@@ -110,26 +111,21 @@ async function submitWithRows(importId: string, rows: SubmitRow[]) {
           hasError: false,
           errorMsg: null,
         })),
-      });
-      await tx.import.update({
+      }),
+      prisma.import.update({
         where: { id: importId },
         data: {
           status: 'submitted',
           totalRows: validated.length,
           errorRows: 0,
         },
-      });
-      return { conflict: false, totalRows: validated.length };
-    });
-
-    if (result.conflict) {
-      return NextResponse.json({ error: '导入状态不允许提交（可能已提交）' }, { status: 409 });
-    }
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,
-      totalRows: result.totalRows,
-      message: `成功提交 ${result.totalRows} 条运单`,
+      totalRows: validated.length,
+      message: `成功提交 ${validated.length} 条运单`,
     });
   } catch (error: any) {
     console.error('提交事务异常:', error);

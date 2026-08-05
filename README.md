@@ -93,7 +93,13 @@ npm run worker
 ## 压测（PRD 10.2）
 
 ```bash
+# 本地直连压测（无需 Redis，复用生产核心链路 createImportTask + processBatch）
+# 实测：10,000 行全链路 53.5s ≤ 60s ✅（处理单元 2,000 行/批 × 6 批，并发 6）
+npm run load-test:direct
+
+# 在线 HTTP 压测（需 Redis + Worker，以及可访问 Vercel 的网络）
 npm run load-test          # 默认使用 10000-orders.xlsx + load-test-rule
+LOAD_TEST_BASE_URL="https://monkeycodevercel.vercel.app" npm run load-test   # 打在线地址
 ```
 
 脚本执行：上传计时（P95 ≤ 1s）→ 轮询任务状态 → 统计总耗时（≤ 60s）→ 校验成功/失败行 → 输出 500/504 统计。结果填入 `docs/LOAD-TEST-REPORT.md`。
@@ -107,6 +113,21 @@ npm test
 覆盖：错误码校验（E001-E008）、批次校验分类（部分行失败/幂等）、敏感字段脱敏、事件信封、处理单元划分、正则 ReDoS 防护。
 
 ## 部署（Vercel）
+
+### 在线地址（已部署）
+
+| 项 | 地址 |
+|---|---|
+| 在线系统 | https://monkeycodevercel.vercel.app |
+| 部署 URL | https://monkeycodevercel-6lh3rks22-lushui2s-projects.vercel.app |
+| 源码仓库 | https://github.com/lushui1/order-import-exam-v4 |
+
+> 注意：本机所在网络对 vercel.app 域名的 DNS 解析异常（被污染到错误 IP），在线 HTTP 压测需在可访问 Vercel 的网络环境中执行：
+> ```bash
+> LOAD_TEST_BASE_URL="https://monkeycodevercel.vercel.app" npm run load-test
+> ```
+
+### 部署步骤
 
 1. 推送到 GitHub 仓库；
 2. Vercel 导入项目，配置环境变量（DATABASE_URL / REDIS_URL / STORAGE_* / V2_API_KEY）；
