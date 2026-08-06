@@ -11,6 +11,8 @@ export default function HomePage() {
   const [aiRule, setAiRule] = useState<any>(null);
   const [loading, setLoading] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  // 内联提示（替代 alert 弹窗）
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -69,7 +71,7 @@ export default function HomePage() {
       // 进入任务进度页
       router.push(`/tasks/${data.task_id}`);
     } catch (err: any) {
-      alert(err.message || '上传失败');
+      setNotice({ type: 'err', text: err.message || '上传失败' });
     } finally {
       setLoading('');
     }
@@ -78,6 +80,7 @@ export default function HomePage() {
   const handleAIGenerate = async () => {
     if (!file) return;
     setLoading('AI分析中...');
+    setNotice(null);
 
     try {
       const fd = new FormData();
@@ -89,9 +92,9 @@ export default function HomePage() {
       if (data.error) throw new Error(data.error);
 
       setAiRule(data.rule);
-      alert('AI已生成规则，请在下方查看并确认');
+      setNotice({ type: 'ok', text: 'AI 规则生成成功，请确认下方规则后点击"开始导入"' });
     } catch (err: any) {
-      alert('AI分析失败: ' + err.message);
+      setNotice({ type: 'err', text: 'AI 分析失败: ' + (err.message || '未知错误') });
     } finally {
       setLoading('');
     }
@@ -109,6 +112,21 @@ export default function HomePage() {
             异步事件驱动批量导入系统 — 上传即返回，后台异步处理
           </p>
         </div>
+
+        {/* 内联提示（替代 alert 弹窗） */}
+        {notice && (
+          <div style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 8,
+            background: notice.type === 'ok' ? 'var(--success-bg, #f6ffed)' : 'var(--error-bg)',
+            border: `1px solid ${notice.type === 'ok' ? '#b7eb8f' : '#ffccc7'}`,
+            color: notice.type === 'ok' ? '#389e0d' : 'var(--error)',
+            fontSize: 14,
+          }}>
+            {notice.type === 'ok' ? '✅ ' : '⚠️ '}{notice.text}
+          </div>
+        )}
 
         {/* 上传区 */}
         <div className="card" style={{ marginBottom: 24 }}>

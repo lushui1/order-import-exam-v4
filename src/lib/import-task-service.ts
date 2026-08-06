@@ -104,6 +104,7 @@ export async function createImportTask(
         id: taskId,
         fileName,
         fileKey: stored.key,
+        fileData: buffer, // 文件内容入 DB：Vercel Serverless /tmp 不共享，供 Worker/process 跨实例读取（PRD 3.1）
         ruleId,
         importId: legacyImportId,
         status: 'pending',

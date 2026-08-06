@@ -88,6 +88,7 @@ model ImportTask {
   id               String   @id @default(cuid())
   fileName         String   @map("file_name")
   fileKey          String   @map("file_key") // 原始文件引用（对象存储/本地路径）
+  fileData         Bytes?   @map("file_data") // 原始文件内容（Vercel Serverless /tmp 不共享，存入 DB 供 Worker 读取）
   ruleId           String?  @map("rule_id")
   importId         String?  @map("import_id") // 兼容 V2 Import 表外键（orders.importId 非空约束）
   status           String   @default("pending") // pending | processing | completed | partial_success | failed

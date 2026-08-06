@@ -112,7 +112,13 @@ export async function processBatch(job: BatchJobData): Promise<void> {
   try {
     // ── 阶段1: 文件解析（读文件） ──
     const tParseStart = Date.now();
-    const buffer = await readStoredFile(fileKey || task.fileKey);
+    // 优先使用任务表中保存的文件内容（Vercel Serverless /tmp 不共享，跨实例需从 DB 读，PRD 3.1）
+    let buffer: Buffer;
+    if (task.fileData && task.fileData.length > 0) {
+      buffer = Buffer.from(task.fileData);
+    } else {
+      buffer = await readStoredFile(fileKey || task.fileKey);
+    }
     const tReadEnd = Date.now();
     const parseDurationMs = tReadEnd - tParseStart;
 

@@ -50,7 +50,27 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [processing, setProcessing] = useState(false);
+  const [processMsg, setProcessMsg] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 立即处理：无 Redis/Worker 环境下手动触发消费（调用 /process 端点）
+  const handleProcess = async () => {
+    if (processing) return;
+    setProcessing(true);
+    setProcessMsg('正在处理...');
+    try {
+      const res = await fetch(`/api/import-tasks/${taskId}/process`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '处理失败');
+      setProcessMsg(`已处理 ${data.processed} 个批次（剩余 ${data.failed_batches} 个失败），请观察进度刷新`);
+      load();
+    } catch (err: any) {
+      setProcessMsg('处理失败: ' + (err.message || '未知错误'));
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +142,31 @@ export default function TaskDetailPage() {
               {STATUS_LABEL[task.status] || task.status}
             </span>
           </div>
+
+          {/* 无 Worker 环境提示 + 立即处理按钮 */}
+          {!['COMPLETED', 'PARTIAL_SUCCESS', 'FAILED'].includes(task.status) && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: '#fff7e6', border: '1px solid #ffd591', borderRadius: 8, padding: '10px 14px', marginBottom: 12,
+            }}>
+              <p style={{ color: '#ad4e00', fontSize: 13 }}>
+                ℹ️ 任务在后台等待处理。若未部署常驻 Worker，可点击右侧按钮手动触发消费。
+              </p>
+              <button
+                className="btn-primary"
+                onClick={handleProcess}
+                disabled={processing}
+                style={{ padding: '6px 16px', fontSize: 13, whiteSpace: 'nowrap' }}
+              >
+                {processing ? '处理中...' : '⚡ 立即处理'}
+              </button>
+            </div>
+          )}
+          {processMsg && (
+            <p style={{ fontSize: 13, marginBottom: 8, color: processMsg.startsWith('处理失败') ? 'var(--error)' : 'var(--success)' }}>
+              {processMsg}
+            </p>
+          )}
 
           {/* 进度条 */}
           <div style={{ background: 'var(--border)', borderRadius: 8, height: 12, overflow: 'hidden', marginBottom: 8 }}>
