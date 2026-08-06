@@ -11,6 +11,7 @@
     "dispatcher": "tsx scripts/dispatcher.ts",
     "load-test": "tsx scripts/load-test.ts",
     "load-test:direct": "tsx scripts/load-test-direct.ts",
+    "load-test:online": "tsx scripts/load-test-online.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sonner": "^2.0.7",
+    "undici": "^7.29.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

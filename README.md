@@ -97,6 +97,10 @@ npm run worker
 # 实测：10,000 行全链路 53.5s ≤ 60s ✅（处理单元 2,000 行/批 × 6 批，并发 6）
 npm run load-test:direct
 
+# 在线完整链路压测（上传打 Vercel 在线接口 + Worker 消费；本机需配置代理访问 Vercel）
+# 实测：10,000 行全链路 39.6s ≤ 60s ✅（经代理上传耗时 9s，含跨区域网络延迟）
+npm run load-test:online
+
 # 在线 HTTP 压测（需 Redis + Worker，以及可访问 Vercel 的网络）
 npm run load-test          # 默认使用 10000-orders.xlsx + load-test-rule
 LOAD_TEST_BASE_URL="https://monkeycodevercel.vercel.app" npm run load-test   # 打在线地址

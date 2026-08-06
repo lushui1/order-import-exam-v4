@@ -1,5 +1,6 @@
 // 文件存储抽象（PRD 模块二：保存原始文件或可复读的文件引用）
 // 本地开发用 uploads/ 目录；生产可配置 S3/R2/Vercel Blob（STORAGE_BACKEND=s3）
+// Vercel Serverless 的 process.cwd() 只读，必须使用 /tmp（PRD 3.1 约束）
 
 import { mkdir, writeFile, readFile, unlink } from 'fs/promises';
 import path from 'path';
@@ -17,7 +18,10 @@ export interface StoredFile {
   backend: 'local' | 's3';
 }
 
-const uploadRoot = path.join(process.cwd(), 'uploads');
+// Vercel Serverless 环境 process.cwd() 只读，写入 /tmp；本地开发写 uploads/
+const uploadRoot = process.env.VERCEL
+  ? '/tmp/uploads'
+  : path.join(process.cwd(), 'uploads');
 
 // 保存文件，返回可复读的文件引用
 export async function saveFile(key: string, buffer: Buffer): Promise<StoredFile> {

@@ -107,7 +107,9 @@ function generateOrdersExcel(): void {
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '运单数据');
-  XLSX.writeFile(wb, EXCEL_PATH);
+  // 压缩写入（bookSST 共享字符串 + zip 压缩）：文件体积从 ~4.7MB 降到 ~1.7MB，
+  // 满足 Vercel Serverless 函数 4.5MB 请求体限制（PRD 3.1 大文件约束）
+  XLSX.writeFile(wb, EXCEL_PATH, { compression: true, bookSST: true });
 
   console.log(`     已生成 ${EXCEL_PATH}`);
   console.log(`     其中故意注入: 非法SKU ${invalidSkus.size} 行, 非法电话 ${invalidPhones.size} 行, 非法数量 ${invalidQtys.size} 行, 空SKU ${emptySkus.size} 行`);

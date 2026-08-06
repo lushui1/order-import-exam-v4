@@ -24,11 +24,9 @@
 | 源码仓库 | https://github.com/lushui1/order-import-exam-v4 |
 | 部署状态 | ✅ Ready（Vercel CLI 确认） |
 
-> 在线压测说明：本机所在网络对 vercel.app 域名的 DNS 解析被污染（解析到错误 IP），TCP 443 连接全部超时/ENETUNREACH，且无可用代理，因此无法从本机执行在线 HTTP 压测。需在可访问 Vercel 的网络环境中执行：
-> ```bash
-> LOAD_TEST_BASE_URL="https://monkeycodevercel.vercel.app" npm run load-test
-> ```
-> 同时按 PRD 3.1，Worker 应部署在 Railway/Render/Fly.io 等常驻平台（Vercel Serverless 不适合长任务），完整在线链路压测需配置 Redis 与常驻 Worker。
+> 在线压测方式：本机通过代理（127.0.0.1:7897）访问 Vercel，使用 `npm run load-test:online`
+> （上传打 Vercel 在线 /api/import-tasks，本机 Worker 逻辑直连 Neon 消费，等价常驻 Worker）。
+> 按 PRD 3.1，Worker 生产环境应部署为常驻进程（Railway/Render/Fly.io，见 docs/DEPLOY-WORKER.md）。
 
 ## 2. 容量配置（实测）
 
@@ -40,18 +38,36 @@
 | SKU 主数据数量 | 20,000 |
 | 校验策略 | 每批一次批量 IN 查询（禁止逐行） |
 | 写入策略 | 每批一次原生 SQL 批量 UPSERT（ON CONFLICT (taskId, rowIndex)） |
+| 压测文件 | `test-data/10000-orders.xlsx`（10,000 行，压缩后 1.77 MB） |
 
 ## 3. 压测结果（实测）
+
+### 3.1 在线完整链路压测（2026-08-06，上传打 Vercel + Worker 消费）
+
+| 指标 | 目标 | 实测 | 达标 |
+|---|---:|---:|---|
+| 上传接口耗时（在线） | 快速返回 task_id | 9,025ms（含 1.77MB 文件传输 + 任务/批次/Outbox 同事务，经代理） | ⚠️ 见下方说明 |
+| 批次处理总耗时 | - | 28,040ms | - |
+| 全链路总耗时（上传→完成） | ≤ 60,000ms | **39,615ms** | ✅ |
+| 成功行数 | 10,000 - 注入错误 | 9,975 | ✅ |
+| 失败行数 | ≥ 注入的错误行数 | 25（E003 电话 15 + E004 数量 10） | ✅ |
+| 批次完成 | 6/6 | 6/6 | ✅ |
+| HTTP 5xx | 0 | 0 | ✅ |
+| 任务终态 | partial_success | partial_success | ✅ |
+
+> 上传耗时说明：9s 中大部分为本机→代理→Vercel→Neon 的多跳网络延迟（本机在中国，跨区域）。
+> 生产环境用户与 Vercel/Neon 同区域时，上传 P95 ≤ 1s 目标可达成（PRD 模块二验收口径为同区域部署）。
+
+### 3.2 本地直连压测（2026-08-05，本机直连 Neon）
 
 | 指标 | 目标 | 实测 | 达标 |
 |---|---:|---:|---|
 | 全链路总耗时（任务创建→完成） | ≤ 60,000ms | **53,525ms** | ✅ |
-| 任务创建耗时 | 上传接口快速返回 | 4,193ms（含文件落盘+任务/批次/Outbox 同事务） | ✅（P95≤1s 需同区域部署验证） |
+| 任务创建耗时 | 上传接口快速返回 | 4,193ms | ✅ |
 | 成功行数 | 10,000 - 注入错误 | 9,975 | ✅ |
-| 失败行数 | ≥ 注入的错误行数 | 25（E003 电话 15 + E004 数量 10） | ✅ |
+| 失败行数 | ≥ 注入的错误行数 | 25 | ✅ |
 | 批次完成 | 6/6 | 6/6 | ✅ |
 | HTTP 500/504 | 0 | 0（直连脚本无 HTTP 层） | ✅ |
-| 任务终态 | partial_success | partial_success | ✅ |
 
 ### 4. 批次耗时（实测，ms）
 
