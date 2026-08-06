@@ -53,6 +53,7 @@ export default function TaskDetailPage() {
   const [processing, setProcessing] = useState(false);
   const [processMsg, setProcessMsg] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoTriggeredRef = useRef(false);
 
   // 立即处理：无 Redis/Worker 环境下手动触发消费（调用 /process 端点）
@@ -93,10 +94,10 @@ export default function TaskDetailPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setTask(data);
-      // 任务进入终态后停止轮询，避免无谓请求
-      if (['COMPLETED', 'PARTIAL_SUCCESS', 'FAILED'].includes(data.status) && timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+      // 任务进入终态后停止轮询与计时，避免无谓请求和"已用时间"持续增长
+      if (['COMPLETED', 'PARTIAL_SUCCESS', 'FAILED'].includes(data.status)) {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; }
       }
     } catch (err: any) {
       setError(err.message || '加载失败');
@@ -107,10 +108,10 @@ export default function TaskDetailPage() {
     load();
     // 轮询 1.5 秒刷新（PRD 模块七：建议 1~2 秒）
     timerRef.current = setInterval(load, 1500);
-    const clock = setInterval(() => setNow(Date.now()), 1000);
+    clockRef.current = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      clearInterval(clock);
+      if (clockRef.current) clearInterval(clockRef.current);
     };
   }, [load]);
 
