@@ -12,8 +12,11 @@
  */
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
+import { ProxyAgent } from 'undici';
 
 const BASE_URL = process.env.LOAD_TEST_BASE_URL || 'http://localhost:3000';
+// 在线压测经代理访问（本机对 vercel.app 直连 DNS 污染，PRD 验收为公网可访问）
+const PROXY = process.env.LOAD_TEST_PROXY || 'http://127.0.0.1:7897';
 const DEFAULT_FILE = path.join(process.cwd(), 'test-data', '10000-orders.xlsx');
 const POLL_INTERVAL_MS = 1000;
 const MAX_WAIT_MS = 90_000;
@@ -31,6 +34,11 @@ interface TaskResult {
   degraded: boolean;
 }
 
+// 在线压测走代理（模拟公网外部用户访问）
+const dispatcher = new ProxyAgent(PROXY);
+// @ts-ignore - undici dispatcher 是全局 fetch 的扩展选项（Node 20+），TS 类型未包含
+const apiFetch = (url: string, init?: RequestInit) => fetch(url, { ...init, dispatcher });
+
 async function main() {
   const filePath = process.argv[2] || DEFAULT_FILE;
   if (!existsSync(filePath)) {
@@ -45,12 +53,24 @@ async function main() {
   const buffer = readFileSync(filePath);
   const form = new FormData();
   form.append('file', new Blob([buffer]), path.basename(filePath));
-  // 若传入规则ID则使用；否则依赖 seed 脚本的 load-test-rule
-  const ruleId = process.argv[3];
+  // 未显式传入规则ID时，自动查询 load-test-rule（否则任务无规则，process 会全部失败）
+  let ruleId = process.argv[3];
+  if (!ruleId) {
+    try {
+      const rulesRes = await apiFetch(`${BASE_URL}/api/rules`);
+      const rules = await rulesRes.json();
+      const rule = (rules || []).find((r: any) => r.name === 'load-test-rule') || (rules || [])[0];
+      ruleId = rule?.id || '';
+    } catch {
+      ruleId = '';
+    }
+  }
   if (ruleId) form.append('ruleId', ruleId);
+  console.log(`[压测] 规则ID: ${ruleId || '(未指定)'}`);
 
+  // 注意：不手动设置 Content-Type，由 undici 自动生成 multipart boundary（与 load-test-online 一致）
   const uploadStart = Date.now();
-  const uploadRes = await fetch(`${BASE_URL}/api/import-tasks`, { method: 'POST', body: form });
+  const uploadRes = await apiFetch(`${BASE_URL}/api/import-tasks`, { method: 'POST', body: form });
   const uploadMs = Date.now() - uploadStart;
   const uploadBody = await uploadRes.json().catch(() => null);
 
@@ -68,6 +88,28 @@ async function main() {
   console.log(`[压测] task_id: ${taskId}`);
   console.log(`[压测] 预估行数: ${uploadBody.total_rows}, 批次数: ${uploadBody.total_batches}`);
 
+  // ── 1.5 模拟外部用户访问任务页：前端自动触发一次消费（POST /process，无 Redis 兜底消费）
+  console.log(`[压测] 模拟前端自动触发消费...`);
+  let processRes: Response | null = null;
+  let processBody: any = null;
+  // undici 代理复用连接可能被服务端重置（ECONNRESET），重试最多 3 次
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      processRes = await apiFetch(`${BASE_URL}/api/import-tasks/${taskId}/process`, { method: 'POST' });
+      processBody = await processRes.json().catch(() => null);
+      if (processRes.ok) break;
+    } catch (err: any) {
+      if (attempt < 3) {
+        console.log(`[压测] 消费触发重试 ${attempt}/3 (${err?.cause?.code || err?.message})`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      console.error(`[压测] 消费触发失败: ${err?.cause?.code || err?.message}`);
+    }
+  }
+  if (processRes && processRes.status >= 500) httpErrors++;
+  console.log(`[压测] 消费触发: HTTP ${processRes?.status ?? '失败'}, 已处理批次 ${processBody?.processed ?? '?'}/${processBody?.total_batches ?? '?'}`);
+
   // ── 2. 轮询任务状态直到完成 ──
   const startedAt = Date.now();
   let task: TaskResult | null = null;
@@ -75,7 +117,7 @@ async function main() {
 
   while (Date.now() - startedAt < MAX_WAIT_MS) {
     const pollStart = Date.now();
-    const res = await fetch(`${BASE_URL}/api/import-tasks/${taskId}`);
+    const res = await apiFetch(`${BASE_URL}/api/import-tasks/${taskId}`);
     if (res.status >= 500) httpErrors++;
     if (res.ok) {
       const data = await res.json();
