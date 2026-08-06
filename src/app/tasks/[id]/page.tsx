@@ -49,7 +49,7 @@ export default function TaskDetailPage() {
   const taskId = String(params.id);
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState('');
-  const [elapsed, setElapsed] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -76,7 +76,7 @@ export default function TaskDetailPage() {
     load();
     // 轮询 1.5 秒刷新（PRD 模块七：建议 1~2 秒）
     timerRef.current = setInterval(load, 1500);
-    const clock = setInterval(() => setElapsed(Date.now()), 1000);
+    const clock = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       clearInterval(clock);
@@ -164,7 +164,7 @@ export default function TaskDetailPage() {
             { label: '批次完成', value: `${task.completed_batches}/${task.total_batches}`, color: 'var(--text-secondary)' },
             { label: '吞吐(行/分)', value: task.throughput, color: 'var(--text-secondary)' },
             { label: '预计剩余', value: task.estimated_remaining_seconds > 0 ? `${task.estimated_remaining_seconds}s` : '-', color: 'var(--text-secondary)' },
-            { label: '已用时间', value: `${Math.round(elapsed / 1000)}s`, color: 'var(--text-secondary)' },
+            { label: '已用时间', value: `${Math.max(0, Math.round((now - new Date(task.created_at).getTime()) / 1000))}s`, color: 'var(--text-secondary)' },
           ].map(s => (
             <div key={s.label} className="card" style={{ padding: '14px 16px' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>{s.label}</p>
