@@ -117,7 +117,22 @@ async function main() {
 
   while (Date.now() - startedAt < MAX_WAIT_MS) {
     const pollStart = Date.now();
-    const res = await apiFetch(`${BASE_URL}/api/import-tasks/${taskId}`);
+    let res: Response | null = null;
+    // 轮询请求也加重试（代理偶发 ECONNRESET）
+    for (let a = 1; a <= 3; a++) {
+      try {
+        res = await apiFetch(`${BASE_URL}/api/import-tasks/${taskId}`);
+        break;
+      } catch (err: any) {
+        if (a < 3) {
+          console.log(`[压测] 轮询重试 ${a}/3 (${err?.cause?.code || err?.message})`);
+          await new Promise(r => setTimeout(r, 1500));
+        } else {
+          res = null;
+        }
+      }
+    }
+    if (!res) { httpErrors++; console.error('[压测] 状态查询连接失败'); break; }
     if (res.status >= 500) httpErrors++;
     if (res.ok) {
       const data = await res.json();
