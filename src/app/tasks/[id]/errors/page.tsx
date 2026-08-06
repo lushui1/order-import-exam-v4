@@ -51,6 +51,29 @@ export default function TaskErrorsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  // PRD 模块七：导出失败明细（当前筛选结果，CSV，敏感字段已脱敏）
+  const handleExport = () => {
+    if (errors.length === 0) return;
+    const header = ['row_number', 'batch_index', 'field_name', 'raw_value', 'error_code', 'error_reason', 'created_at'];
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [
+      header.join(','),
+      ...errors.map(e => [e.row_number, e.batch_index, e.field_name, e.raw_value, e.error_code, e.error_reason, e.created_at].map(esc).join(',')),
+    ];
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `errors_${taskId}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div style={{ minHeight: '100vh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -75,7 +98,18 @@ export default function TaskErrorsPage() {
               task_id: <code>{taskId}</code> · 共 {total} 条错误 · 敏感字段已脱敏
             </p>
           </div>
-          <a href={`/tasks/${taskId}`} style={{ color: 'var(--primary)' }}>← 返回任务</a>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {/* PRD 模块七：可导出失败明细 */}
+            <button
+              className="btn-outline"
+              onClick={handleExport}
+              disabled={errors.length === 0 || loading}
+              style={{ padding: '6px 14px', fontSize: 13 }}
+            >
+              📥 导出失败明细 (CSV)
+            </button>
+            <a href={`/tasks/${taskId}`} style={{ color: 'var(--primary)' }}>← 返回任务</a>
+          </div>
         </div>
 
         {/* 筛选（PRD 模块六：按批次/错误类型筛选） */}

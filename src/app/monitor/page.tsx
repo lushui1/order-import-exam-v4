@@ -14,11 +14,13 @@ interface ErrorDist { error_code: string; count: number; }
 interface TaskDist { status: string; count: number; }
 interface SlowBatch { task_id: string; unit_id: string; batch_index: number; total_duration_ms: number; }
 interface ThroughputPoint { minute: string; rows: number; }
+interface RecentErrorTask { task_id: string; file_name: string; failed_rows: number; }
 
 interface MonitorData {
   throughput_per_minute: ThroughputPoint[];
   queue_backlog_rows: number;
   queue_backlog_warning: boolean;
+  recent_error_tasks?: RecentErrorTask[];
   stage_duration_ms: StageDuration;
   error_distribution: ErrorDist[];
   task_distribution: TaskDist[];
@@ -166,15 +168,22 @@ export default function MonitorPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {data.error_distribution.map(e => {
                   const pct = errorTotal > 0 ? Math.round((e.count / errorTotal) * 100) : 0;
+                  // PRD 模块八：错误类型分布可点击跳转到错误明细（最近有该错误的任务）
+                  const targetTask = (data.recent_error_tasks || [])[0];
+                  const detailHref = targetTask
+                    ? `/tasks/${targetTask.task_id}/errors?error_code=${encodeURIComponent(e.error_code)}`
+                    : '/monitor';
                   return (
                     <div key={e.error_code}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                        <span><code>{e.error_code}</code> {ERROR_LABEL[e.error_code] || ''}</span>
-                        <span style={{ color: 'var(--text-muted)' }}>{e.count} ({pct}%)</span>
-                      </div>
-                      <div style={{ background: 'var(--border)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--primary)' }} />
-                      </div>
+                      <a href={detailHref} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                          <span><code>{e.error_code}</code> {ERROR_LABEL[e.error_code] || ''} {targetTask && '→'}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>{e.count} ({pct}%)</span>
+                        </div>
+                        <div style={{ background: 'var(--border)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--primary)' }} />
+                        </div>
+                      </a>
                     </div>
                   );
                 })}

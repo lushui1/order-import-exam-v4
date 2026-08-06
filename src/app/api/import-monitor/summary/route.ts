@@ -78,10 +78,19 @@ export async function GET(req: NextRequest) {
     // ── 7. 降级任务数 ──
     const degradedCount = await prisma.importTask.count({ where: { degraded: true } });
 
+    // ── 8. 最近有错误的任务（供前端"错误分布 → 跳转错误明细"使用，PRD 模块八） ──
+    const recentErrorTasks = await prisma.importTask.findMany({
+      where: { failedRows: { gt: 0 } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { id: true, fileName: true, failedRows: true },
+    });
+
     return NextResponse.json({
       throughput_per_minute: perMinute,
       queue_backlog_rows: backlogRows,
       queue_backlog_warning: backlogRows > 5000,
+      recent_error_tasks: recentErrorTasks.map(t => ({ task_id: t.id, file_name: t.fileName, failed_rows: t.failedRows })),
       stage_duration_ms: {
         parse: stageDist('parseDurationMs'),
         rule: stageDist('ruleDurationMs'),
