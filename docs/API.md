@@ -127,6 +127,34 @@
 
 ---
 
+## 8.4b 手动触发消费（无 Worker 环境兜底）
+
+### POST /api/import-tasks/:taskId/process
+
+直接复用 Worker 核心链路 `processBatch` 消费任务所有 pending 批次（无需 Redis）。
+生产环境由 Dispatcher + Worker 自动消费；本端点用于无常驻 Worker 环境的演示/兜底，幂等安全。
+
+**响应 200**：
+
+```json
+{
+  "task_id": "task_xxx",
+  "processed": 6,
+  "failed_batches": 0,
+  "task_status": "partial_success",
+  "processed_rows": 10000,
+  "success_rows": 9950,
+  "failed_rows": 50,
+  "completed_batches": 6,
+  "total_batches": 6,
+  "degraded": false
+}
+```
+
+> 前端任务页进入时自动调用一次本端点（自动触发消费），任务完成后停止轮询与计时。
+
+---
+
 ## 8.5 Trace 搜索
 
 ### GET /api/traces/:traceId

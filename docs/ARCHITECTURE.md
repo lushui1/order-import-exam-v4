@@ -24,7 +24,7 @@ flowchart LR
 
 | 模式 | 落地 |
 |---|---|
-| 异步任务表 | `import_tasks`：status/total_rows/processed_rows/success_rows/failed_rows/total_batches/completed_batches/trace_id/degraded |
+| 异步任务表 | `import_tasks`：status/total_rows/processed_rows/success_rows/failed_rows/total_batches/completed_batches/trace_id/degraded；`file_data`(bytea) 存文件内容解决 Vercel Serverless /tmp 跨实例不共享（PRD 3.1） |
 | 分批任务 | `import_task_batches`：2,000 行/批（PRD 4.1 允许 500/1000/2000），unit_id 唯一，状态机 pending→processing→completed |
 | Transactional Outbox | `event_outbox`：任务+批次+事件同事务创建；Dispatcher 轮询投递，SKIP LOCKED 防并发 |
 | 批量校验 | Worker 内收集批次 SKU → 一次 `IN` 查询 → Map 匹配（禁逐行） |

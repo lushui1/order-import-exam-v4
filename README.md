@@ -169,12 +169,19 @@ npm run worker       # Import Worker
 | 模块一 压测数据自动准备 | ✅ scripts/seed-data.ts |
 | 模块二 上传即返回 | ✅ POST /api/import-tasks（同事务 Outbox） |
 | 模块三 Outbox 投递 | ✅ dispatcher + SKIP LOCKED + 指数退避 |
-| 模块四 Worker 异步处理 | ✅ worker.ts（复用规则引擎/批量校验/批量写/原子进度） |
+| 模块四 Worker 异步处理 | ✅ worker.ts（复用规则引擎/批量校验/批量写/原子进度）+ 任务页自动触发消费 |
 | 模块五 幂等与重复保护 | ✅ task_id+row_index 唯一键 + 批次状态机 |
 | 模块六 精细化错误 | ✅ import_task_errors（E001-E008/脱敏/筛选分页） |
-| 模块七 任务进度页 | ✅ /tasks/:id（轮询/吞吐/剩余时间/降级提示） |
+| 模块七 任务进度页 | ✅ /tasks/:id（轮询/吞吐/剩余时间/降级提示/终态冻结耗时） |
 | 模块八 监控看板 | ✅ /monitor（吞吐/积压/耗时/错误分布/慢批次） |
 | 模块九 Trace 检索 | ✅ /traces（时间线） |
 | 模块十 容灾降级 | ✅ SKU 查询超时降级 + 显式提示 |
 | 模块十一 假设说明 | ✅ docs/ASSUMPTIONS.md |
 | 十章 测试与压测 | ✅ vitest + load-test.ts + 压测报告 |
+
+## 交互与部署说明
+
+- **无弹窗**：所有页面使用内联提示（✅/⚠️ 提示条）替代 alert，AI 生成/上传/提交/导出结果直接显示在页面内。
+- **自动处理**：上传后进入任务页即自动触发一次消费（`POST /api/import-tasks/:taskId/process`，幂等）；生产部署常驻 Worker 后由 Worker 自动消费，无需手动操作。页面保留"⚡ 立即处理"按钮作兜底。
+- **文件存储**：Vercel Serverless 的 `/tmp` 跨实例不共享（PRD 3.1），文件内容同时存入 `import_tasks.file_data`（bytea），Worker/process 跨实例从 DB 读取。
+- **已用时间**：任务进入终态（completed/partial_success/failed）后停止计时，展示总耗时而非持续增长。
