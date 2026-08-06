@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callLLM, buildAnalyzePrompt } from '@/lib/llm';
 import { getFilePreview } from '@/lib/rule-engine/engine';
 
+// Vercel Serverless 函数最大执行时长（Hobby 上限 60s；LLM 推理较慢需要放宽）
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -50,6 +53,19 @@ export async function POST(req: NextRequest) {
       }, { status: 503 });
     }
     console.error('AI生成规则异常:', error);
+    // 区分"未配置 LLM"与真正的失败：未配置时给用户明确提示（AI 是可选功能，不应报笼统错误）
+    if (error?.message?.includes('LLM_API_KEY 未配置')) {
+      return NextResponse.json({
+        error: 'AI 功能未启用：未配置 LLM_API_KEY。可先在解析规则中选择已有规则或手动配置，AI 生成仅为可选功能。',
+        code: 'LLM_NOT_CONFIGURED',
+      }, { status: 503 });
+    }
+    if (error?.message?.includes('超时')) {
+      return NextResponse.json({
+        error: 'AI 分析超时：文件过大或模型响应较慢，请稍后重试或换用已有解析规则。',
+        code: 'LLM_TIMEOUT',
+      }, { status: 504 });
+    }
     return NextResponse.json({ error: 'AI分析失败，请稍后重试' }, { status: 500 });
   }
 }

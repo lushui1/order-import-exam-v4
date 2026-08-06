@@ -4,7 +4,8 @@ const LLM_API_URL = process.env.LLM_API_URL || 'https://api.deepseek.com/v1/chat
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
 const LLM_MODEL = process.env.LLM_MODEL || 'deepseek-chat';
 // LLM 调用超时（毫秒），避免上游挂起导致请求永久等待
-const LLM_TIMEOUT_MS = 30_000;
+// Agnes 为推理模型，大文件预览提示词推理较慢，放宽到 60s（配合 Vercel maxDuration=60）
+const LLM_TIMEOUT_MS = 60_000;
 
 export async function callLLM(prompt: string): Promise<string> {
   if (!LLM_API_KEY) {
