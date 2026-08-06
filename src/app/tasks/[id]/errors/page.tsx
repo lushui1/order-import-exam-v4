@@ -25,6 +25,8 @@ export default function TaskErrorsPage() {
   const [batch, setBatch] = useState('');
   const [errorCode, setErrorCode] = useState('');
   const [loading, setLoading] = useState(false);
+  // 内联提示（替代 alert 弹窗）
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const pageSize = 50;
 
   const load = useCallback(async () => {
@@ -39,7 +41,7 @@ export default function TaskErrorsPage() {
       setErrors(data.errors || []);
       setTotal(data.total || 0);
     } catch (err: any) {
-      alert(err.message);
+      setNotice({ type: 'err', text: err.message || '加载失败' });
     } finally {
       setLoading(false);
     }
@@ -52,6 +54,20 @@ export default function TaskErrorsPage() {
   return (
     <div style={{ minHeight: '100vh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* 内联提示（替代 alert 弹窗） */}
+        {notice && (
+          <div style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 8,
+            background: notice.type === 'ok' ? '#f6ffed' : 'var(--error-bg)',
+            border: `1px solid ${notice.type === 'ok' ? '#b7eb8f' : '#ffccc7'}`,
+            color: notice.type === 'ok' ? '#389e0d' : 'var(--error)',
+            fontSize: 14,
+          }}>
+            {notice.type === 'ok' ? '✅ ' : '⚠️ '}{notice.text}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)' }}>❌ 错误明细</h1>

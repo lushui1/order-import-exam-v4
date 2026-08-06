@@ -53,6 +53,7 @@ export default function TaskDetailPage() {
   const [processing, setProcessing] = useState(false);
   const [processMsg, setProcessMsg] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoTriggeredRef = useRef(false);
 
   // 立即处理：无 Redis/Worker 环境下手动触发消费（调用 /process 端点）
   const handleProcess = async () => {
@@ -71,6 +72,16 @@ export default function TaskDetailPage() {
       setProcessing(false);
     }
   };
+
+  // 自动触发一次消费：进入任务页即开始处理（PRD 模块四 Worker 异步消费；
+  // 生产环境部署常驻 Worker 后由 Worker 消费，本自动触发作为无 Worker 环境兜底，幂等安全）
+  useEffect(() => {
+    if (!task || autoTriggeredRef.current) return;
+    if (['COMPLETED', 'PARTIAL_SUCCESS', 'FAILED'].includes(task.status)) return;
+    if (task.processed_rows > 0) return; // 已在处理中，无需再触发
+    autoTriggeredRef.current = true;
+    handleProcess();
+  }, [task]);
 
   const load = useCallback(async () => {
     try {

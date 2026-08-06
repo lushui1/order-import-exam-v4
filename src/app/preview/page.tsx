@@ -29,6 +29,8 @@ export default function PreviewPage() {
   const [loading, setLoading] = useState('');
   const [errorRows, setErrorRows] = useState(0);
   const [totalRows, setTotalRows] = useState(0);
+  // 内联提示（替代 alert 弹窗）
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export default function PreviewPage() {
   const handleSubmit = async () => {
     const errors = rows.filter(r => r.errors.length > 0);
     if (errors.length > 0) {
-      alert(`还有 ${errors.length} 条错误数据，请先修正`);
+      setNotice({ type: 'err', text: `还有 ${errors.length} 条错误数据，请先修正` });
       return;
     }
 
@@ -81,10 +83,10 @@ export default function PreviewPage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      alert(data.message);
+      setNotice({ type: 'ok', text: data.message || '提交成功' });
       router.push('/imports');
     } catch (err: any) {
-      alert(err.message);
+      setNotice({ type: 'err', text: err.message || '提交失败' });
     } finally {
       setLoading('');
     }
@@ -113,7 +115,7 @@ export default function PreviewPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.message);
+      setNotice({ type: 'err', text: err.message || '导出失败' });
     } finally {
       setLoading('');
     }
@@ -124,6 +126,20 @@ export default function PreviewPage() {
   return (
     <div style={{ minHeight: '100vh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        {/* 内联提示（替代 alert 弹窗） */}
+        {notice && (
+          <div style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 8,
+            background: notice.type === 'ok' ? '#f6ffed' : 'var(--error-bg)',
+            border: `1px solid ${notice.type === 'ok' ? '#b7eb8f' : '#ffccc7'}`,
+            color: notice.type === 'ok' ? '#389e0d' : 'var(--error)',
+            fontSize: 14,
+          }}>
+            {notice.type === 'ok' ? '✅ ' : '⚠️ '}{notice.text}
+          </div>
+        )}
         {/* 头部 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>

@@ -7,6 +7,8 @@ export default function RulesPage() {
   const [editingRule, setEditingRule] = useState<any>(null);
   const [ruleJson, setRuleJson] = useState('');
   const [loading, setLoading] = useState(false);
+  // 内联提示（替代 alert 弹窗）
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     fetchRules();
@@ -37,10 +39,11 @@ export default function RulesPage() {
       if (res.ok) {
         setEditingRule(null);
         setRuleJson('');
+        setNotice({ type: 'ok', text: '规则已保存' });
         fetchRules();
       }
     } catch (err: any) {
-      alert('JSON格式错误: ' + err.message);
+      setNotice({ type: 'err', text: 'JSON格式错误: ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -60,6 +63,20 @@ export default function RulesPage() {
   return (
     <div style={{ minHeight: '100vh', padding: '40px 20px' }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
+        {/* 内联提示（替代 alert 弹窗） */}
+        {notice && (
+          <div style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 8,
+            background: notice.type === 'ok' ? '#f6ffed' : 'var(--error-bg)',
+            border: `1px solid ${notice.type === 'ok' ? '#b7eb8f' : '#ffccc7'}`,
+            color: notice.type === 'ok' ? '#389e0d' : 'var(--error)',
+            fontSize: 14,
+          }}>
+            {notice.type === 'ok' ? '✅ ' : '⚠️ '}{notice.text}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>⚙️ 解析规则管理</h1>
           <a href="/" style={{ color: 'var(--primary)' }}>← 返回首页</a>

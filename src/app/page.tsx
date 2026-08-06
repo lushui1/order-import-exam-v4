@@ -234,7 +234,7 @@ export default function HomePage() {
                   className="btn-primary"
                   onClick={() => {
                     setSelectedRule(null);
-                    alert('已选择AI规则，点击"开始导入"执行');
+                    setNotice({ type: 'ok', text: '已选择AI规则，点击"开始导入"执行' });
                   }}
                 >
                   使用此规则
