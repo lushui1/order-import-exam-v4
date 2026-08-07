@@ -54,6 +54,7 @@
   "degraded_reason": null,
   "error_message": null,
   "created_at": "2026-08-05T10:00:00.000Z",
+  "started_at": "2026-08-05T10:00:03.000Z",
   "completed_at": null,
   "batches": [
     {

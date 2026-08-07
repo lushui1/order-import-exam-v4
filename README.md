@@ -184,4 +184,4 @@ npm run worker       # Import Worker
 - **无弹窗**：所有页面使用内联提示（✅/⚠️ 提示条）替代 alert，AI 生成/上传/提交/导出结果直接显示在页面内。
 - **自动处理**：上传后进入任务页即自动触发一次消费（`POST /api/import-tasks/:taskId/process`，幂等）；生产部署常驻 Worker 后由 Worker 自动消费，无需手动操作。页面保留"⚡ 立即处理"按钮作兜底。
 - **文件存储**：Vercel Serverless 的 `/tmp` 跨实例不共享（PRD 3.1），文件内容同时存入 `import_tasks.file_data`（bytea），Worker/process 跨实例从 DB 读取。
-- **已用时间**：任务进入终态（completed/partial_success/failed）后停止计时，展示总耗时而非持续增长。
+- **已用时间**：以 `started_at`（首个批次抢占时落库）为基准——终态展示 `completed_at - started_at` 真实处理耗时，处理中实时计时，未开始处理显示 `-`；排队等待时间不计入，避免 `created_at` 基准导致的虚高（曾出现 55980s 假耗时）。
