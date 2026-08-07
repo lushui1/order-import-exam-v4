@@ -108,6 +108,14 @@ export async function processBatch(job: BatchJobData): Promise<void> {
   const task = await prisma.importTask.findUnique({ where: { id: taskId } });
   if (!task) throw new Error(`任务不存在: ${taskId}`);
 
+  // 任务级幂等：首个批次抢占成功后记录 started_at 并将任务置为 processing
+  // （updateMany 条件 startedAt: null，并发批次仅首个能写入；
+  //   PRD 状态机 pending→processing→终态，吞吐/已用时间基于 started_at 计算真实处理耗时）
+  await prisma.importTask.updateMany({
+    where: { id: taskId, startedAt: null },
+    data: { startedAt: new Date(), status: 'processing' },
+  });
+
   const t0 = Date.now();
   try {
     // ── 阶段1: 文件解析（读文件） ──

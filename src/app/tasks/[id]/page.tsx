@@ -30,6 +30,7 @@ interface TaskDetail {
   degraded_reason: string | null;
   error_message: string | null;
   created_at: string;
+  started_at: string | null;
   completed_at: string | null;
   batches: BatchInfo[];
   recent_errors: { row: number; code: string; reason: string }[];
@@ -221,12 +222,16 @@ export default function TaskDetailPage() {
             { label: '批次完成', value: `${task.completed_batches}/${task.total_batches}`, color: 'var(--text-secondary)' },
             { label: '吞吐(行/分)', value: task.throughput, color: 'var(--text-secondary)' },
             { label: '预计剩余', value: task.estimated_remaining_seconds > 0 ? `${task.estimated_remaining_seconds}s` : '-', color: 'var(--text-secondary)' },
-            // 已用时间：终态任务显示真实处理耗时（completed_at - created_at），非终态实时计时
-            { label: '已用时间', value: `${Math.max(0, Math.round(((
-              task.completed_at
-                ? new Date(task.completed_at).getTime()
-                : now
-            ) - new Date(task.created_at).getTime()) / 1000))}s`, color: 'var(--text-secondary)' },
+            // 已用时间：以 started_at（真实开始处理时间）为基准 ——
+            // 终态 = completed_at - started_at；非终态 = now - started_at（实时计时）；
+            // 尚未开始处理（无 started_at）显示 '-'，避免把排队等待时间算进处理耗时
+            { label: '已用时间', value: task.started_at
+              ? `${Math.max(0, Math.round(((
+                task.completed_at
+                  ? new Date(task.completed_at).getTime()
+                  : now
+              ) - new Date(task.started_at).getTime()) / 1000))}s`
+              : '-', color: 'var(--text-secondary)' },
           ].map(s => (
             <div key={s.label} className="card" style={{ padding: '14px 16px' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>{s.label}</p>

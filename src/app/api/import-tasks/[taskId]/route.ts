@@ -37,10 +37,14 @@ export async function GET(
       return NextResponse.json({ error: '任务不存在' }, { status: 404 });
     }
 
-    // 吞吐量（行/分钟）：基于 completedAt 与 processedRows 估算
+    // 吞吐量（行/分钟）与预计剩余：以真实处理起始时间 started_at 为基准（PRD 模块七：
+    // 吞吐须反映实际处理速度；created_at 含排队等待时间，会造成吞吐/已用时间虚高）
+    const baseStartMs = task.startedAt
+      ? task.startedAt.getTime()
+      : task.createdAt.getTime();
     const elapsedMs = task.completedAt
-      ? task.completedAt.getTime() - task.createdAt.getTime()
-      : Date.now() - task.createdAt.getTime();
+      ? task.completedAt.getTime() - baseStartMs
+      : Date.now() - baseStartMs;
     const throughput = elapsedMs > 0
       ? Math.round((task.processedRows / Math.max(elapsedMs / 60000, 0.01)))
       : 0;
@@ -65,6 +69,7 @@ export async function GET(
       degraded_reason: task.degradedReason,
       error_message: task.errorMessage,
       created_at: task.createdAt.toISOString(),
+      started_at: task.startedAt?.toISOString() || null,
       completed_at: task.completedAt?.toISOString() || null,
       batches: task.batches.map(b => ({
         unit_id: b.unitId,
