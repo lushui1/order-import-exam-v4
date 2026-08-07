@@ -221,7 +221,12 @@ export default function TaskDetailPage() {
             { label: '批次完成', value: `${task.completed_batches}/${task.total_batches}`, color: 'var(--text-secondary)' },
             { label: '吞吐(行/分)', value: task.throughput, color: 'var(--text-secondary)' },
             { label: '预计剩余', value: task.estimated_remaining_seconds > 0 ? `${task.estimated_remaining_seconds}s` : '-', color: 'var(--text-secondary)' },
-            { label: '已用时间', value: `${Math.max(0, Math.round((now - new Date(task.created_at).getTime()) / 1000))}s`, color: 'var(--text-secondary)' },
+            // 已用时间：终态任务显示真实处理耗时（completed_at - created_at），非终态实时计时
+            { label: '已用时间', value: `${Math.max(0, Math.round(((
+              task.completed_at
+                ? new Date(task.completed_at).getTime()
+                : now
+            ) - new Date(task.created_at).getTime()) / 1000))}s`, color: 'var(--text-secondary)' },
           ].map(s => (
             <div key={s.label} className="card" style={{ padding: '14px 16px' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 4 }}>{s.label}</p>
