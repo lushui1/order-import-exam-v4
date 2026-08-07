@@ -187,9 +187,14 @@
   "error_distribution": [{ "error_code": "E001", "count": 20 }],
   "task_distribution": [{ "status": "partial_success", "count": 1 }],
   "slow_batches_top10": [{ "task_id": "task_x", "unit_id": "unit_001", "batch_index": 0, "total_duration_ms": 3200 }],
-  "degraded_tasks": 0
+  "degraded_tasks": 0,
+  "failed_tasks_24h": 1,
+  "failed_tasks_24h_warning": true
 }
 ```
+
+> `failed_tasks_24h`：近 24 小时失败任务数（`status=failed` 且 `completed_at` 在 24h 内），
+> `failed_tasks_24h_warning` 为 true 时前端告警条红色高亮（PRD 模块八告警能力）。
 
 ---
 

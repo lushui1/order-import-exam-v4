@@ -78,6 +78,12 @@ export async function GET(req: NextRequest) {
     // ── 7. 降级任务数 ──
     const degradedCount = await prisma.importTask.count({ where: { degraded: true } });
 
+    // ── 7b. 近 24 小时失败任务数（失败任务告警：PRD 模块八告警能力） ──
+    const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const failedTasks24h = await prisma.importTask.count({
+      where: { status: 'failed', completedAt: { gte: dayAgo } },
+    });
+
     // ── 8. 最近有错误的任务（供前端"错误分布 → 跳转错误明细"使用，PRD 模块八） ──
     const recentErrorTasks = await prisma.importTask.findMany({
       where: { failedRows: { gt: 0 } },
@@ -107,6 +113,8 @@ export async function GET(req: NextRequest) {
         total_duration_ms: b.totalDurationMs,
       })),
       degraded_tasks: degradedCount,
+      failed_tasks_24h: failedTasks24h,
+      failed_tasks_24h_warning: failedTasks24h > 0,
     });
   } catch (error: any) {
     console.error('监控聚合异常:', error);

@@ -26,6 +26,8 @@ interface MonitorData {
   task_distribution: TaskDist[];
   slow_batches_top10: SlowBatch[];
   degraded_tasks: number;
+  failed_tasks_24h: number;
+  failed_tasks_24h_warning: boolean;
 }
 
 const ERROR_LABEL: Record<string, string> = {
@@ -107,6 +109,17 @@ export default function MonitorPage() {
             <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>降级任务</p>
             <p style={{ fontSize: 20, fontWeight: 700, color: data.degraded_tasks > 0 ? '#ad6800' : 'var(--text-secondary)' }}>
               {data.degraded_tasks} 个
+            </p>
+          </div>
+          <div className={`card ${data.failed_tasks_24h_warning ? 'tag-error' : ''}`} style={{
+            padding: '14px 16px', flex: 1,
+            border: data.failed_tasks_24h_warning ? '1px solid var(--error)' : undefined,
+            background: data.failed_tasks_24h_warning ? 'var(--error-bg)' : undefined,
+          }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>近 24h 失败任务</p>
+            <p style={{ fontSize: 20, fontWeight: 700, color: data.failed_tasks_24h_warning ? 'var(--error)' : 'var(--text-secondary)' }}>
+              {data.failed_tasks_24h} 个
+              {data.failed_tasks_24h_warning && ' ⚠️ 需处理'}
             </p>
           </div>
         </div>

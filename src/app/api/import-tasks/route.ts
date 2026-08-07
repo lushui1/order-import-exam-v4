@@ -11,10 +11,18 @@ import { MAX_UPLOAD_SIZE } from '@/lib/config';
 const ALLOWED_EXTENSIONS = new Set(['xlsx', 'xls', 'docx', 'pdf']);
 
 // 预扫描：快速识别总行数（xlsx/xls 读取首个 sheet 的行数；docx/pdf 返回 0，由 Worker 完成后更新）
+// 性能：只读模式下仅需行数，关闭公式/样式/日期解析与单元格对象（dense 数组），显著降低上传内耗
 function estimateTotalRows(buffer: Buffer, ext: string): number {
   if (ext === 'xlsx' || ext === 'xls') {
     try {
-      const wb = XLSX.read(buffer, { type: 'buffer' });
+      const wb = XLSX.read(buffer, {
+        type: 'buffer',
+        cellFormula: false,
+        cellStyles: false,
+        cellDates: false,
+        cellNF: false,
+        dense: true, // 稀疏对象 → 密集数组，解析更快
+      });
       const firstSheet = wb.SheetNames[0];
       if (firstSheet) {
         const ws = wb.Sheets[firstSheet];
